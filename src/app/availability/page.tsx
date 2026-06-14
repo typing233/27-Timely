@@ -36,7 +36,7 @@ export default function AvailabilityPage() {
       });
   }, []);
 
-  function updateRule(index: number, field: string, value: string | boolean) {
+  function updateRule(index: number, field: keyof Rule, value: string | number | boolean) {
     const updated = [...rules];
     updated[index] = { ...updated[index], [field]: value };
     setRules(updated);
@@ -53,16 +53,25 @@ export default function AvailabilityPage() {
   async function handleSave() {
     setSaving(true);
     setMessage("");
+    const cleanRules = rules.map(({ id, ...rest }) => rest);
+    const cleanSettings = {
+      minAdvanceHours: settings.minAdvanceHours,
+      maxAdvanceDays: settings.maxAdvanceDays,
+      bufferMinutes: settings.bufferMinutes,
+    };
     const res = await fetch("/api/availability", {
       method: "PUT",
       headers,
-      body: JSON.stringify({ rules, settings }),
+      body: JSON.stringify({ rules: cleanRules, settings: cleanSettings }),
     });
     if (res.ok) {
       setMessage("Availability saved successfully");
       const data = await res.json();
       setRules(data.rules);
       setSettings(data.settings);
+    } else {
+      const data = await res.json();
+      setMessage(`Error: ${JSON.stringify(data.error)}`);
     }
     setSaving(false);
   }
@@ -122,7 +131,7 @@ export default function AvailabilityPage() {
             <div key={i} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
               <select
                 value={rule.dayOfWeek}
-                onChange={(e) => updateRule(i, "dayOfWeek", e.target.value)}
+                onChange={(e) => updateRule(i, "dayOfWeek", Number(e.target.value))}
                 className="input-field w-40"
               >
                 {DAYS.map((day, idx) => (

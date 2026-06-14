@@ -130,3 +130,54 @@ export async function deleteGoogleCalendarEvent(
     console.error("Failed to delete Google Calendar event:", error);
   }
 }
+
+export async function updateGoogleCalendarEvent(
+  userId: string,
+  eventId: string,
+  event: {
+    summary?: string;
+    description?: string;
+    startTime?: Date;
+    endTime?: Date;
+    attendeeEmail?: string;
+    timezone?: string;
+    status?: "confirmed" | "cancelled";
+  }
+): Promise<void> {
+  const integration = await prisma.calendarIntegration.findUnique({
+    where: { userId_provider: { userId, provider: "GOOGLE" } },
+  });
+
+  if (!integration || !integration.isActive) return;
+
+  oauth2Client.setCredentials({
+    access_token: integration.accessToken,
+    refresh_token: integration.refreshToken,
+  });
+
+  const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+
+  const requestBody: Record<string, unknown> = {};
+  if (event.summary) requestBody.summary = event.summary;
+  if (event.description !== undefined) requestBody.description = event.description;
+  if (event.startTime && event.timezone) {
+    requestBody.start = { dateTime: event.startTime.toISOString(), timeZone: event.timezone };
+  }
+  if (event.endTime && event.timezone) {
+    requestBody.end = { dateTime: event.endTime.toISOString(), timeZone: event.timezone };
+  }
+  if (event.attendeeEmail) {
+    requestBody.attendees = [{ email: event.attendeeEmail }];
+  }
+  if (event.status) requestBody.status = event.status;
+
+  try {
+    await calendar.events.patch({
+      calendarId: integration.calendarId || "primary",
+      eventId,
+      requestBody,
+    });
+  } catch (error) {
+    console.error("Failed to update Google Calendar event:", error);
+  }
+}

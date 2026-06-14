@@ -5,6 +5,7 @@ import { getAvailableSlots } from "@/lib/availability";
 import { sendEmail } from "@/lib/email";
 import { triggerWebhooks } from "@/lib/webhooks";
 import { createGoogleCalendarEvent } from "@/lib/google-calendar";
+import { createAppleCalendarEvent } from "@/lib/apple-calendar";
 import { z } from "zod";
 import { format } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Selected time slot is not available" }, { status: 409 });
     }
 
-    const booking = await prisma.booking.create({
+    let booking = await prisma.booking.create({
       data: {
         eventTypeId: data.eventTypeId,
         userId: eventType.userId,
@@ -106,7 +107,10 @@ export async function POST(req: NextRequest) {
       sendEmail(data.guestEmail, "BOOKING_CONFIRMATION_GUEST", eventType.userId, emailData),
     ]);
 
-    await createGoogleCalendarEvent(eventType.userId, {
+    // Create calendar events and save external event ID for future sync
+    let calendarEventId: string | null = null;
+
+    const googleEventId = await createGoogleCalendarEvent(eventType.userId, {
       summary: `${eventType.name} with ${data.guestName}`,
       description: data.guestNotes,
       startTime: new Date(data.startTime),
@@ -114,6 +118,32 @@ export async function POST(req: NextRequest) {
       attendeeEmail: data.guestEmail,
       timezone: data.timezone,
     });
+
+    if (googleEventId) {
+      calendarEventId = `google:${googleEventId}`;
+    }
+
+    const appleEventId = await createAppleCalendarEvent(eventType.userId, {
+      summary: `${eventType.name} with ${data.guestName}`,
+      description: data.guestNotes,
+      startTime: new Date(data.startTime),
+      endTime: new Date(data.endTime),
+      attendeeEmail: data.guestEmail,
+      organizerEmail: eventType.user.email,
+    });
+
+    if (appleEventId) {
+      calendarEventId = calendarEventId
+        ? `${calendarEventId};apple:${appleEventId}`
+        : `apple:${appleEventId}`;
+    }
+
+    if (calendarEventId) {
+      booking = await prisma.booking.update({
+        where: { id: booking.id },
+        data: { calendarEventId },
+      });
+    }
 
     await triggerWebhooks(eventType.userId, "booking.created", {
       bookingId: booking.id,

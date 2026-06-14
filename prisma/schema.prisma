@@ -76,6 +76,7 @@ model Booking {
   status          BookingStatus @default(CONFIRMED)
   timezone        String
   cancelToken     String        @unique @default(uuid())
+  calendarEventId String?       // external calendar event ID for sync
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 

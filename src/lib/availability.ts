@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { addMinutes, startOfDay, endOfDay, eachDayOfInterval, format, isBefore, addDays, addHours, parseISO } from "date-fns";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
 import { getGoogleBusyTimes } from "./google-calendar";
+import { getAppleBusyTimes } from "./apple-calendar";
 
 interface TimeSlot {
   start: string;
@@ -57,6 +58,11 @@ export async function getAvailableSlots(
   try {
     const googleBusy = await getGoogleBusyTimes(userId, startOfDay(date), endOfDay(date));
     busyTimes = [...busyTimes, ...googleBusy];
+  } catch {}
+
+  try {
+    const appleBusy = await getAppleBusyTimes(userId, startOfDay(date), endOfDay(date));
+    busyTimes = [...busyTimes, ...appleBusy];
   } catch {}
 
   const slots: TimeSlot[] = [];
