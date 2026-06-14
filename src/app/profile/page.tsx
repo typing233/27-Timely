@@ -82,36 +82,138 @@ export default function ProfilePage() {
       <div className="card max-w-lg mt-6">
         <h2 className="text-lg font-semibold mb-4">Calendar Integrations</h2>
         <div className="space-y-3">
-          <IntegrationCard provider="Google Calendar" />
-          <IntegrationCard provider="Apple Calendar" />
+          <GoogleIntegrationCard />
+          <AppleIntegrationCard />
         </div>
       </div>
     </div>
   );
 }
 
-function IntegrationCard({ provider }: { provider: string }) {
+function GoogleIntegrationCard() {
   const [connecting, setConnecting] = useState(false);
 
   async function connect() {
     setConnecting(true);
     const token = localStorage.getItem("token");
-    if (provider === "Google Calendar") {
-      const res = await fetch("/api/integrations/google", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      window.location.href = data.url;
-    }
-    setConnecting(false);
+    const res = await fetch("/api/integrations/google", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    window.location.href = data.url;
   }
 
   return (
     <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-      <span className="font-medium">{provider}</span>
+      <span className="font-medium">Google Calendar</span>
       <button onClick={connect} className="btn-secondary text-sm" disabled={connecting}>
         {connecting ? "Connecting..." : "Connect"}
       </button>
+    </div>
+  );
+}
+
+function AppleIntegrationCard() {
+  const [showForm, setShowForm] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [calendarUrl, setCalendarUrl] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const [error, setError] = useState("");
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    fetch("/api/integrations/apple", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.connected) setConnected(true);
+      });
+  }, []);
+
+  async function handleConnect(e: React.FormEvent) {
+    e.preventDefault();
+    setConnecting(true);
+    setError("");
+    const token = localStorage.getItem("token");
+    const res = await fetch("/api/integrations/apple", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        username,
+        appSpecificPassword: password,
+        calendarUrl: calendarUrl || undefined,
+      }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setConnected(true);
+      setShowForm(false);
+    } else {
+      setError(data.error || "Connection failed");
+    }
+    setConnecting(false);
+  }
+
+  async function disconnect() {
+    const token = localStorage.getItem("token");
+    await fetch("/api/integrations/apple", {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    setConnected(false);
+  }
+
+  if (connected) {
+    return (
+      <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
+        <div>
+          <span className="font-medium">Apple Calendar</span>
+          <span className="ml-2 text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Connected</span>
+        </div>
+        <button onClick={disconnect} className="btn-secondary text-sm">Disconnect</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 bg-gray-50 rounded-lg">
+      <div className="flex items-center justify-between">
+        <span className="font-medium">Apple Calendar</span>
+        {!showForm && (
+          <button onClick={() => setShowForm(true)} className="btn-secondary text-sm">Connect</button>
+        )}
+      </div>
+      {showForm && (
+        <form onSubmit={handleConnect} className="mt-4 space-y-3">
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Apple ID (email)</label>
+            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)}
+              className="input-field text-sm" placeholder="user@icloud.com" required />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">App-Specific Password</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+              className="input-field text-sm" placeholder="xxxx-xxxx-xxxx-xxxx" required />
+            <p className="text-xs text-gray-500 mt-1">Generate at appleid.apple.com &rarr; Sign-In &rarr; App-Specific Passwords</p>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">CalDAV URL (optional)</label>
+            <input type="url" value={calendarUrl} onChange={(e) => setCalendarUrl(e.target.value)}
+              className="input-field text-sm" placeholder="https://caldav.icloud.com/..." />
+            <p className="text-xs text-gray-500 mt-1">Leave empty to auto-discover. Provide if auto-discovery fails.</p>
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" className="btn-primary text-sm" disabled={connecting}>
+              {connecting ? "Testing..." : "Connect"}
+            </button>
+            <button type="button" onClick={() => setShowForm(false)} className="btn-secondary text-sm">Cancel</button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
